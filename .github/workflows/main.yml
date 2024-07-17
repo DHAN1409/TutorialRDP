@@ -5,35 +5,38 @@ on: [push, workflow_dispatch]
 jobs:
   build:
     runs-on: self-hosted
-
     steps:
-    - name: Download ngrok
-      run: Invoke-WebRequest https://bin.equinox.io/c/bNyj1mQVY4c/ngrok-v3-stable-windows-amd64.zip -OutFile ngrok.zip
-
-    - name: Extract ngrok
-      run: Expand-Archive ngrok.zip
-
-    - name: Auth ngrok
+    - name: Checkout Code
+      uses: actions/checkout@v2
+    - name: Debug Network
+      run: |
+        [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+        Write-Host "Checking connectivity..."
+        Test-NetConnection bin.equinox.io
+    - name: Download Ngrok
+      run: |
+        [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+        Invoke-WebRequest https://bin.equinox.io/c/bNyj1mQVY4c/ngrok-v3-stable-windows-amd64.zip -OutFile ngrok.zip
+    - name: Extract Ngrok
+      run: Expand-Archive ngrok.zip -DestinationPath ngrok
+    - name: Auth Ngrok
       run: .\ngrok\ngrok.exe authtoken $Env:NGROK_AUTH_TOKEN
       env:
         NGROK_AUTH_TOKEN: ${{ secrets.NGROK_AUTH_TOKEN }}
-
     - name: Enable Remote Desktop
       run: |
         Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fDenyTSConnections" -Value 0
         Enable-NetFirewallRule -DisplayGroup "Remote Desktop"
         Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "UserAuthentication" -Value 1
-
-    - name: Create User
+    - name: Create User if not exists
       run: |
         $user = 'runneradmin'
         $password = ConvertTo-SecureString -AsPlainText "P@ssw0rd!" -Force
         if (-not (Get-LocalUser -Name $user -ErrorAction SilentlyContinue)) {
-            New-LocalUser -Name $user -Password $password -FullName "Runner Admin" -Description "User for RDP session"
+            New-LocalUser -Name $user -Password $password -FullName "Runner Admin" -Description "User for RDP"
             Add-LocalGroupMember -Group "Administrators" -Member $user
         } else {
             Set-LocalUser -Name $user -Password $password
         }
-
     - name: Create Tunnel
       run: .\ngrok\ngrok.exe tcp 3389
